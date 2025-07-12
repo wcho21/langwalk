@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+COMMAND=$1
+shift
+
+TODO_PATH=$HOME/.todo
+
+add_task() {
+  if [ -z "$1" ]; then
+    echo "Error: no task name."
+    exit 1
+  fi
+
+  echo "$1" >> $TODO_PATH
+  echo "Added task '$1'."
+}
+
+add_tasks() {
+  for TASK in "$@"; do
+    add_task "$TASK"
+  done
+}
+
+list_tasks() {
+  local i=0
+
+  cat $TODO_PATH | while read LINE; do
+    (( i++ ))
+    echo "$i: $LINE"
+  done
+}
+
+remove_task() {
+  local TARGET=$1
+  local TODO_BACKUP_PATH="$TODO_PATH.bak"
+  local i=0
+
+  rm -f $TODO_BACKUP_PATH
+
+  cat $TODO_PATH | while read LINE; do
+    (( i++ ))
+    if [ $i -eq $TARGET ]; then
+      continue
+    fi
+
+    echo "$LINE" >> $TODO_BACKUP_PATH
+  done
+
+  mv $TODO_BACKUP_PATH $TODO_PATH
+}
+
+case $COMMAND in
+  "add")
+    if [ $# -eq 0 ]; then
+      echo "Error: no arguments."
+      exit 1
+    fi
+
+    add_tasks "$@"
+    ;;
+  "list")
+    list_tasks
+    ;;
+  "remove")
+    remove_task "$@"
+    ;;
+  *)
+    echo "Error: unknown command '$COMMAND'."
+    ;;
+esac
