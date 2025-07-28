@@ -143,7 +143,62 @@ to answer that, we need to cover asm.
 since above c code actually generate other codes, yet effectively the same with the one we've written.
 
 
+
 # hello, world
 
+here we're going to write less boring asm: printing something
 
-#
+## what is reg?
+
+cpu only handles arithmetics with regs, not mem.
+we'll cover arithmetics soon.
+
+## what is section?
+
+we can see the section in executable file, using objdump.
+
+
+
+# implementing variables
+
+
+
+# implementing cond
+
+
+
+# implementing array
+
+
+
+# implementing loop
+
+
+
+# implementing string
+
+
+
+# implementing func
+
+
+
+# abi (calling convention)
+
+
+
+# interrupt (i/o)
+
+
+
+# syscall
+
+
+
+# linker and executable formats
+
+
+
+# details on risc-v
+
+not a generic asm, but if you interested in RISC-V, see this section.
