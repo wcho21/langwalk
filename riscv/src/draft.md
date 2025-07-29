@@ -156,6 +156,10 @@ Make an executable, and execute it to see the changed exit code.
 
 Here we're going to write more interesting one: printing something.
 
+--- DONE
+
+TODO: align on data? on text? ref?
+
 ## what is reg?
 
 cpu only handles arithmetics with regs, not mem.
