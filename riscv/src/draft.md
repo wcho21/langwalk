@@ -667,31 +667,35 @@ See the disassemble of `.data` (aligned):
 Introduce `.aligned`, and why we need this, using reference.
 
 
-# implementing arith
 
-now that we've implemented global int variable,
-let's do that for addition.
+# Implementing arithmetics
 
-the virtual c code is:
-```
-foo + 99;
+Now that we've implemented global variables, let's compile addition.
+
+The virtual c code is:
+```c
+int foo = 42;
+
+int main(void) {
+  return foo + 99;
+}
 ```
 
-it's simple, because asm support this arithmetics directly:
+The point is the addition.
+
+It's simple, because this arithmetic is directly supported.
+Copy the `int.S` file to `add.S` file, and just add a single line:
 ```
+  # exit(foo + 99)
   lw a0, foo
-  addi a0, a0, 99
+  addiw a0, a0, 99
   li a7, 93
   ecall
 ```
 
-execute and we get:
-```
-$ echo $?
-141
-```
+Execute and we get the exit code `141`.
 
-you can find c assembler generate similar code for:
+You can find c assembler generate similar code for this `add_c.c`:
 ```
 int foo = 42;
 
@@ -700,9 +704,48 @@ int main(void) {
 }
 ```
 
-do the check again as we've done above.
+Check again as we've done above.
+You'll find somethign like this:
 
-TODO: why gcc generate addiw instead of addi?
+```
+	lw	a5,0(a5)
+	addiw	a5,a5,99
+```
+
+## Subtraction
+
+How about subtraction?
+
+```c
+int foo = 42;
+
+int main(void) {
+  return 99 - foo;
+}
+```
+
+If you want to do yourself first, use the `sub` instruction:
+```
+sub rd, rs1, rs2
+```
+
+Here `rd` is the destination register, and other two is the source registers. It results in `rs1 - rs2`.
+
+Note that it doesn't have immediate version, so it requires two registers.
+
+The example answer is:
+
+```
+  # exit(foo - 42)
+  lw a0, foo
+  li a1, 42
+  sub a0, a0, a1
+  li a7, 93
+  ecall
+```
+
+Execute it and you'll get `57`.
+
 
 
 # implement assign
