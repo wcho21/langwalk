@@ -3,7 +3,19 @@ FIX (TODO):
 
 TODO: solve quizzes and add solution codes.
 TODO: Why `sext.w` needed? (when compiled `if`)
+TODO: Why `lw a0, foo` works? (Original format: `lw a0, 0(a1)`)
+      -> A. this is a pseudo-instruction
 
+TODO: introduce Byte-addressable
+TODO: introduce registers alias and description (in ABI)
+TODO: how can I load `pc` and why that works?
+
+TODO: signed, and unsigned: representation and value
+TODO: introduct relocation
+
+TODO: immediate is constant encoded in instruction
+
+TODO: explain the structure of an instruction, with each bit fields. With this, explain why 32 registers are there, plus source and destination register concepts, with opcode, which speicifies operation to perform. (Top-down: from objdump to binary)
 
 
 # Introduction
