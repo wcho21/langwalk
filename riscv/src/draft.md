@@ -1,7 +1,8 @@
 FIX (TODO):
-- do not objdump on executable,
-  for simplicity, do on object file
-- add `ip64` -mabi flag
+- add explicitly `-O0` when compile, to show the naive assembly
+
+TODO: solve quizzes and add solution codes.
+TODO: Why `sext.w` needed? (when compiled `if`)
 
 
 
@@ -748,140 +749,140 @@ Execute it and you'll get `57`.
 
 
 
-# implement assign
+# Implementing assignment
 
-TODO: (use sw)
+So far we loaded values from memory, using `lw` instruction:
+
+```
+  lw a1, foo
+```
+
+Now it's time to save value to memory.
+The key is `sw` instruction, which means "save word":
+
+```
+  sw rs1, offset(rs2)
+```
+
+The virtual C code is assignment:
+
+```c
+int foo = 42;
+
+int main(void) {
+  foo = 99;
+  return foo;
+}
+```
+
+Let's implement using assembly, with `foo` as before:
+
+```
+.text
+.global _start
+_start:
+  # foo = 99
+  la a0, foo
+  li a1, 99
+  sw a1, 0(a0)
+```
+
+Here `la` is load address, so `a0` has the address of `foo`.
+Now, `sw` instruction stores the value `a1` to the address `a0`.
+
+Return the exit code:
+
+```
+  # exit(foo)
+  lw a0, foo
+  li a7, 93
+  ecall
+```
+
+Execute and you'll get `99`.
+
+Now we covered how to load from and save to memory.
 
 
-# implementing cond
 
-## how computer read instructions: pc register
+# Implementing conditional
 
-here's how computer basically works:
-- program is loaded to memory
-- cpu fetch next instruction from memory
-- exec instruction
-- repeat
+Now we'll cover conditional and loop.
+Note that all the program we've seen is sequentially executed, with fetch-and-execute cycle and incrementing program counter as described before.
 
-this is basically called von neumann arch,
-and this cycle is called fetch-and-execute.
+But sometimes we have to jump to other instruction, not incrementing program counter.
+For example, see this `if` statement:
 
-fetching next instruction is common here,
-so cpu uses a special register, program counter,
-to save the memory address of current instruction
-and automatically incremented when a single cycle is done.
-so instruction is executed sequentially.
-
-but sometimes we don't need this sequential execution.
-for example, see this if-statement:
 ```c
 if (foo == 42) {
   // ...
 }
 ```
 
-to implement this code, we need to "jump" for the case when `foo` is not `42`.
-so we need to change the value of pc register.
-by setting pc to be address forward,
-we can impelement cond.
-as we'll see, by setting it backward,
-loop is implemented.
+To implement this code, we need to "jump" when `foo` is not `42`.
+This requires program counter to be directly changed.
 
-of course, asm has no concept of "cond" and "loop".
-but we're going to implement this here.
+By jumping forward, we'll implement conditional statement.
+By jumping backward, loop statement.
 
-## impl if
+Of course, assembly has no concept of conditional or loop.
+But we're going to implement these features using only "jump".
 
-let's implement this virtual c code:
+## Implementing `if`
+
+Let's implement this virtual C code:
+
 ```c
 if (foo == 42) {
   foo++;
 }
 ```
 
-asm code, with foo as above:
+Write assembly code:
 ```
 _start:
-  lw t0, foo
-  li t1, 42
+  lw a0, foo
+  li a1, 42
 ```
 
-we prepare foo and 42 to temporary registers t0, t1
+We prepare foo and 42 to registers.
 
-now, if they are not the same, jump the body:
+Now, this is `if` statement:
 
 ```
-  bne t0, t1, if_end
-  addi t0, t0, 1
+  bne a0, a1, if_end
+  # foo++
+  addi a1, a1, 1
+  la a0, foo
+  sw a1, 0(a0)
 if_end:
 ```
 
-`bne` is branch when not equal.
-note that we use opposite condition when writing asm.
+`bne` is "branch when not equal", so jump to `if_end` if not equal.
+The addition won't be executed if `foo` (`a0`) and `42` (`a1`) are the the same.
+Note that we use opposite condition in assembly, so it may be somewhat confusing.
 
-now, end with exit syscall
+Now, `a0` is already `foo`
 ```
-  mv a0, t0
+  lw a0, foo
   li a7, 93
   ecall
 ```
 
-here `mv` is simply copy `t0` to `a0`.
-
-execute:
+Execute:
 ```
 $ echo $?
 43
 ```
 
-why? the foo was 42, and the body has been executed.
-change foo other value and try again.
-the body will not executed
+This means the body has been executed.
+Change `foo` to other value and try again, to see the body is not executed.
 
-in this way, we can implement if-else.
-if-else is left as an exercise.
+Mini quizzes:
+- In this way, we can implement if-else..
+- Short-circuit behaviour of `&&`. Suppose that we need a condition that `foo` and `bar` both equal to `42`.
 
-short-circuit behaviour also left as an exercise
 
-## c compiler
-
-compile this code to executable:
-```c
-int foo = 42;
-
-int main(void) {
-  if (foo == 42) {
-    foo++;
-  }
-
-  return 0;
-}
-```
-
-with:
-```
-$ gcc -static -g if_c.c
-```
-
-now you can "disassemble":
-```
-riscv64-linux-gnu-objdump --disassemble=main -S --no-show-raw-insn a.out
-```
-
-this prints source codes with asm codes.
-
-then you can find similar code with this:
-```
-  if (foo == 42) {
-   10664:       auipc   a5,0x76
-   10668:       addi    a5,a5,-1628 # 86008 <foo>
-   1066c:       lw      a4,0(a5)
-   1066e:       li      a5,42
-   10672:       bne     a4,a5,10690 <main+0x34>
-```
-
-you can see the `bne` asm.
-and the address is the end of if block.
 
 # implementing array
 

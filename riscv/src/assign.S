@@ -2,19 +2,14 @@
 foo: .word 42
 
 .text
-.align 2
 .global _start
 _start:
-  lw a0, foo
-  li a1, 42
-  
-  bne a0, a1, if_end
-  # foo++
-  addi a1, a1, 1
+  # foo = 99
   la a0, foo
+  li a1, 99
   sw a1, 0(a0)
-if_end:
 
+  # exit(foo)
   lw a0, foo
   li a7, 93
   ecall
