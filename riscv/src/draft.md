@@ -18,6 +18,8 @@ TODO: immediate is constant encoded in instruction
 TODO: explain the structure of an instruction, with each bit fields. With this, explain why 32 registers are there, plus source and destination register concepts, with opcode, which speicifies operation to perform. (Top-down: from objdump to binary)
 
 
+TODO: use `/* */` format. there is an issue when using `# if` (figure out what is this.)
+
 # Introduction
 
 (Motivation to learn ASM)
@@ -172,6 +174,9 @@ Make an executable, and execute it to see the changed exit code.
 # Hello example
 
 Here we're going to write more interesting one: printing something.
+We've written a program without explanation before, but here we'll explain some details.
+
+## Writing a program
 
 First, we write `.data` section:
 
@@ -236,19 +241,23 @@ Try different `message` string.
 Try setting `len` manually and see the result.
 What do you get?
 
-## What is a register?
+## Registers
 
 So far, we've been using registers, to use "variables".
 In fact, processors only handle registers, not the memory, to do computation.
 That is, the computation does not happen on memory, including arithmetics and even calling "function".
 We'll cover registers in detail later.
 
-## What is a section?: disassemble
+
+
+# Section: Memory layout: Disassembling
 
 We've written `.text` and `.data` section, which are instruction and constants, respectively.
 This sets memory layout of executable.
+To check this, we're going to see how executable is made in detail.
 
-To check this, we'll see how executable is made in detail.
+(TODO: divide contents into sections (good names?))
+
 The following is making partial executable.
 
 ```
@@ -521,7 +530,9 @@ As we've manually written.
 
 
 
-# Other sizes
+# Other variable sizes
+
+(TODO: introduce hybrid C and memory alignment first here)
 
 What if we need a size other than 4-byte `int`?
 Note that `char` is a single byte in C.
@@ -725,7 +736,13 @@ You'll find somethign like this:
 	addiw	a5,a5,99
 ```
 
+## See the detail in add instruction
+
+(TODO: analyze hex dump and introduce how bits in the instruction are organized)
+
 ## Subtraction
+
+(TODO: make this a quiz and omit the details)
 
 How about subtraction?
 
@@ -815,6 +832,17 @@ Execute and you'll get `99`.
 
 Now we covered how to load from and save to memory.
 
+Quiz: do the following, which loads `foo`, increment the value, and save it to `foo`
+
+```c
+int foo = 42;
+
+int main(void) {
+  foo++;
+  return foo;
+}
+```
+
 
 
 # Implementing conditional
@@ -896,34 +924,170 @@ Mini quizzes:
 
 
 
-# implementing array
+# Implementing array
 
-TODO
+(TODO: add string if necessary, for now, the contents is too short and already briefly introduce in the first section, so omitted)
 
-# implementing loop
+Before implementing loop, we shortly introduce how to implement array and string.
+These are simply a block of memory with arbitrarily determined size.
 
-virtual c code:
+## Array
+
+Let's compile this virtual C code:
 
 ```c
-int arr[5] = { 1, 2, 3, 4, 5 };
-int sum = 0;
+int arr[] = { 42, 99, 1 };
+```
+
+Arrays are contiguous memory allocation, which is specified by:
+
+```
+.data
+arr: .skip 12
+```
+
+with filled with `0`'s.
+Since we have three elements of 4-byte.
+And, as before, `arr` will be the base address of the array.
+
+Or, we can specify each element by:
+```
+.data
+arr:
+  .word 42
+  .word 99
+  .word 1
+```
+
+Can we add up the elements?
+Let's initialize registers:
+```
+_start:
+  /* initialize */
+  li a0, 0
+  la a1, arr
+```
+
+We can add the first element:
+```
+  /* a2 += arr[0]  */
+  lw a2, 0(a1)
+  addw a0, a0, a2
+```
+and second one:
+```
+  /* a2 += arr[1]  */
+  lw a2, 4(a1)
+  addw a0, a0, a2
+```
+
+Note that `4` in ``4(a1)` is offset.
+Add the third element in this way (Do it).
+
+Since `a0` already has the value, we just call exit:
+```
+  /* exit(a0) */
+  li a7, 93
+  ecall
+```
+
+The result exit code will be `142` (check it).
+
+
+
+# Implementing loop
+
+Is there a better way to sum up the elements?
+Maybe we can use a loop.
+The virtual c code:
+
+```c
+int arr[3] = { 42, 99, 1 };
 int i = 0;
+int sum = 0;
 
 int main(void) {
-  for (i = 0; i < 5; i++) {
-    sum += i;
+  for (; i < 3; i++) {
+    sum += arr[i];
   }
+
+  return sum;
 }
 ```
 
-note that `+=` is a shorthand for this:
+As we mentioned, the loop can be implemented using branching.
+With the same data as before, initialize:
 ```
-sum = sum + i
+_start:
+  /* initialize */
+  li a0, 0 /* sum */
+  li a1, 3
+  li a2, 0 /* i */
 ```
 
-as we mentioned, for loop can be implemented using branching.
+Note that we simply use registers, instaed of memory.
 
-TODO: show the code
+Now we add a label for loop beginning:
+```
+loop_start:
+  /* jump if i >= 3 */
+  bge a2, a1, loop_end
+```
+
+This make `pc` jump to the end of the loop.
+We'll add the `loop_end` label when needed.
+
+To access an element, we calculate address from the index variable `i`, or the register `a2`:
+```
+  /* get offset */
+  mv a4, a2
+  slli a4, a4, 2
+```
+
+Here, `mv` is just copy the value, and `slli` is bit shifting to the left, with immedaite value `2`.
+Note that when you shift left the binary `1` to `100`, it is effectively same with multiplying by `4`.
+Since `i` represent the byte, we multiplied it by `4`.
+
+Now the address of the element is:
+```
+  /* a3 = arr + i */
+  la a3, arr
+  add a3, a3, a4
+```
+and the value is:
+```
+  /* a5 = arr[i] */
+  lw a5, 0(a3)
+```
+
+Finally, we add the element to `sum`, or `a0`:
+```
+  /* sum += arr[i] */
+  add a0, a0, a5
+```
+
+Now, we increment `i` and jump to the beginning.
+This is the loop, so we mark there as the end.
+```
+  /* i += 1 */
+  addi a2, a2, 1
+  j loop_start
+loop_end:
+```
+
+Here, `j` is unconditional jump.
+The instruction as `bne` is called conditional jump.
+
+As before, since `a0` is already the sum, we return it:
+```
+  /* exit(a0) */
+  li a7, 93
+  ecall
+```
+
+The result should be `142`, as before.
+
+
 
 # implementing func
 
@@ -1015,15 +1179,6 @@ TODO
 
 
 
-# implementing string
-
-application example: atoi
-
-
-
-# interrupt (i/o)
-
-
 
 # syscall
 
@@ -1032,6 +1187,7 @@ note that this is abstract concept in other asm, possibly different names though
 
 TODO
 
+introduce: mmap
 
 # linker and executable formats
 
@@ -1115,3 +1271,21 @@ we can see the section in executable file, using objdump.
 TODO: cover memory layout -> executable
 
 ---
+
+# Reference
+
+[An Introduction to Assembly Programming with RISC-V][intro-asm-riscv]
+
+[The RISC-V Instruction Set Manual][riscv-manual]
+
+[RISC-V ABIs Specification][riscv-abi]
+
+https://gcc.gnu.org/onlinedocs/gcc/Link-Options.html
+https://gcc.gnu.org/onlinedocs/gcc/RISC-V-Options.html
+https://sourceware.org/binutils/docs-2.41/as/index.html
+
+http://riscvbook.com/korean/risc-v-reader-korean-v1p0.pdf
+
+[intro-asm-riscv]: https://riscv-programming.org/book/riscv-book.html
+[riscv-manual]: https://github.com/riscv/riscv-isa-manual
+[riscv-abi]: https://github.com/riscv-non-isa/riscv-elf-psabi-doc
