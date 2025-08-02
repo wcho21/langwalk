@@ -1089,22 +1089,21 @@ The result should be `142`, as before.
 
 
 
-# implementing func
+# Implementing function
 
-so far, cond and loop are jump in functions.
-now, we implement function.
-so we jump other code.
+Now, we're going to implement a function.
+So far, we jumped to other codes when implementing `if` and `for`.
+But it turns out that a function is not as simple as them.
+Because it should handle the paramters, and preserve context when calling functions.
+This requires a stack, as we'll see.
 
-but it turns out that func is not as simple as cond or loop,
-becuase it should handle the recursion, calling itself.
-this requires stack, as we'll see.
+We'll understand how a function is implemented in two steps:
+First, we implement a simple "leaf" function.
+Second we'll implement recursion.
 
-first we implement a simple "leaf" function.
-second we'll implement recursion.
+## Simple leaf function
 
-## simple leaf function
-
-virtual c code:
+The virtual C code is:
 
 ```c
 int foo = 42;
@@ -1118,31 +1117,27 @@ int main(void) {
 }
 ```
 
-here we implement parameters.
-return values are covered later.
+Here we implement parameters.
+Return values will be covered later.
 
-with `foo` as above:
+With `foo` as above:
 ```
 _start:
   li a0, 99
   jal set_foo
 ```
 
-`a0` is the first argument
-this jump to set_foo symbol.
-this is jump and link, but we cover the meaning later.
+Here `jal` is calling `set_foo` function, which is "jump and link", whose meaning will be covered later.
+Note that `a0` is the first argument of the function.
 
-the following code just sends normal exit code
+This sends `foo` as exit code:
 ```
-  la t0, foo
-  lw a0, 0(t0)
+  lw a0, foo
   li a7, 93
   ecall
 ```
 
-`la` is load address, so the first two lines load the foo's value to `a0`
-
-now, below the _start, make set_foo symbol and function body:
+Now, below the _start, make `set_foo` symbol and function body:
 ```
 set_foo:
   la t0, foo
@@ -1151,52 +1146,269 @@ set_foo:
   ret
 ```
 
-noe that `a0` is first parameter.
-so it stores first parameter to foo.
-last `ret` returns to caller, which is the next instruction of the `jal`
+Noe that `a0` is first parameter, so it stores first parameter to `foo`.
+The last `ret` returns to caller, which is the next instruction of the `jal`
+In this way, `jal` and `ret` are used in pair.
+But, how can `ret` know where to return without explicit address?
 
-in this way, `jal` and `ret` are used in pair.
-but, how can `ret` know where to return without explicit address?
+To return, `jal` stores the next instruction, `pc+4`, to register `ra`, which is a special register to store return address.
+Actually, the `jal` instruction
+```
+  jal set_foo
+```
+is a pseudo-instruction for
+```
+  jal ra, set_foo
+```
+which stores `pc+4` to `ra` and jump to the address of `set_foo`.
 
-## ret
+And `ret` jumps to `ra`, so the caller code is executed.
+And, also, `ret` is a pseudo instruction for
+```
+  jalr x0, ra, 0
+```
+which stores `pc+4` to `x0` and jump to the value `ra+0`.
 
-TODO
+The execution result should be `99`.
 
-## recursion
+## Recursion: stack pointer `sp`
 
-TODO
+We've just covered how to store return address.
+Now suppose there is another call to call like:
+```
+set_foo:
+  la t0, foo
+  sw a0, 0(t0)
 
-## stack
+  jal set_foo
 
-TODO
+  ret
+```
+Does this work?
 
-# abi (calling convention)
+No.
+Note that the return address can't be restored.
+Once inner `set_foo` is called, then the `ra` register will have address within `set_foo`, so we can't return to `_start`.
 
-this section explains why we used first arg as a0.
+So, obviously, we need memory space to store address.
+And we'll handle this memory in a special way, last-in first-out, so we call this stack memory.
 
-TODO
+This time, we'll this recursive function:
+```c
+int sum(int n) {
+	if (n <= 0) {
+		return 0;
+	}
+	
+	return n + sum(n-1);
+}
+
+int main(void) {
+  return sum(10);
+}
+```
+which sums up from `0` to `n`.
+
+We start with `.text` section:
+```
+.text
+.global _start
+_start:
+    li    a0, 10
+    jal   sum
+
+    li    a7, 93
+    ecall
+```
+
+As before, we pass the first argument `10` via `a0`, and jump to `sum` address.
+After the call, we return exit code `a0`.
+
+Now we make `sum` function:
+```
+sum:
+  addi  sp, sp, -16
+```
+
+This manipulates `sp` register, which let the stack grow stack by 16 bytes.
+Since it grows downward, which is called full descending stack, so we decrease the value.
+
+We push the `ra` register onto stack:
+```
+  sw ra, 12(sp)
+```
+
+This is all the data to push.
+Since it takes only 4 byte, we should stack memory aligned to 16 bytes.
+This is required, which we'll cover later.
+
+We first cover the `if` part:
+
+```
+  bgt a0, x0, if_end
+  li a0, 0
+  ret
+if_end:
+```
+
+Note that `x0` is hard-wired `0`.
+So, if the first parameter is `0`, then it return zero via `a0`.
+
+Now, we preserve `a0` before calling `sum`.
+Here we use stack again.
+This is called register pilling (reference?)
+```
+  sw a0, 8(sp)
+```
+
+And, we decrement `a0` and call `sum`.
+
+```
+  addi  a0, a0, -1
+  jal   sum
+```
+
+Note that the return value will be in `a0`.
+So, we sum these result and previous `a0` from stack:
+
+```
+  lw    t0, 8(sp)
+  add   a0, a0, t0
+```
+
+Now, we find the return address from the stack, and return:
+```
+  lw    ra, 12(sp)
+  addi  sp, sp, 16
+  ret
+```
+
+The result should be `55`.
 
 
 
+# ABI (calling convention)
+
+We've made a function, and we passed arguments in `a0`.
+In fact, this is determined process, which is called calling convention.
+
+RISC-V has 32 general purpose registers, `x0` to `x31`.
+Note that `x0` is hardwired zero, so we can use 31 registers.
+
+The return address `ra` is `x1`, and `sp` is `x2`.
+We used `a0` register, but it is actually an alias for `x10`.  
+There are `a0` to `a7` registers for arguments, and `a0` receives return value.
+
+`a0` to `a7` registers are caller-save, which caller should preserve the values using stack.
+Then callee can use `a0` to `a7` registers on their own purpose,
+and they are restored when function ends.
+So we stored `a0` before calling `sum`:
+```
+  sw    a0, 8(sp)
+
+  addi  a0, a0, -1
+  jal   sum
+```
+
+On the other hand, `sp` is callee-save, which callee should preserve the value.
+So caller doesn't need to care about preserving `sp`, across calling function.
+So we moved `sp`:
+```
+sum:
+  addi sp, sp, -16
+```
+and restored it just before `ret`:
+```
+  addi  sp, sp, 16
+  ret
+```
+
+This calling convention is a part of ABI.
 
 
-# syscall
 
-we need to understand: previleged level
-note that this is abstract concept in other asm, possibly different names though.
+# System call: `ecall`
 
-TODO
+We need to understand how system call works, which is used for `ecall`.
+First, we didn't write the code for system call, so how we can call the system call function?
+Where is the code?
 
-introduce: mmap
+It is written in the kernel, which is in the operating system.
+But we can't run arbitrarilly the kernel code,
+because it's protected from user's execution.
+In other words, user code is not trusted, possibly malicious, while the kernel code is trusted.
 
-# linker and executable formats
+So, to protect the system from the possibly malicious code execution,
+the permission is low when executing user codes.
+This is called "user mode" in RISC-V.
 
+To run the kernel code, the permission should be "privileged mode" in RISC-V
+So user can't run the kernel code, and system call code in kernel code.
 
+This distinction is abstract concept in other assembly, with possibly different names.
 
-# details on risc-v
+For example, `addi` is unprivileged, so user can run.
+There are privileged instruction, but we won't cover here.
 
-not a generic asm, but if you interested in RISC-V, see this section.
+But how we can call the kernel code function in user mode?
+This is why `ecall` exists, which changes permission to higher level, and handle the system call.
+How to handle the system call is via privileged instruction.
 
+For example, we supposed to use memory in heap using `malloc()`.
+But as you can see, this requires some system calls, and there are `brk()` or `mmap()` system calls to support this.
+Anyway, this requires more complicated steps than using just stack memory.
+Moreover, this also breaks locality so cache will quite doesn't work for heap memory.
+These factors makes the code runtime slower than using stack memory.
+
+# Why we should avoid manual optimization
+
+So far, we turned off optimization to read the result assembly.
+But in usual compilation, you should turn on the optimization with `-O` flag.
+
+See this example:
+```c
+int main(void) {
+  int sum = 0;
+  for (int i = 1; i <= 10; i++) {
+    sum += i;
+  }
+  return sum;
+}
+```
+It may be compiled to labels and jumps,
+But when you turn on the optimization with `-O3`, you'll get something like:
+```
+	li	a0,55
+```
+which is pre-computed the result.
+Lines of codes reduced to one line of code.
+
+So, the lesson: don't optimize code yourself.
+Usually, manual optimization is bad.
+Let the compiler do the optimization.
+
+Some developer believes, bitshift will be faster than arithmetics, so they turn this code:
+```c
+  foo * 4;
+```
+to
+```
+  foo << 2;
+```
+But it losts meaning of division.
+To keep code clear, don't do this.
+Compiler will automatically optimize artihmetics to bitshifting, when it is safe to do so.
+If you curious, compile this function:
+```c
+int quad(int n) {
+  return n * 4;
+}
+```
+Then you'll get the result like this:
+```
+	slliw	a0,a0,2
+	ret
+```
 
 ---
 

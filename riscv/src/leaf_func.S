@@ -2,13 +2,13 @@
 foo: .word 42
 
 .text
+.align 2
 .global _start
 _start:
   li a0, 99
   jal set_foo
 
-  la t0, foo
-  lw a0, 0(t0)
+  lw a0, foo
   li a7, 93
   ecall
 
